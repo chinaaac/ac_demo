@@ -10,7 +10,7 @@ jobs:
     runs-on: windows-latest
 
     permissions:
-      contents: write  # 确保有写权限
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
@@ -18,7 +18,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.14.0'  # 使用稳定版本避免兼容性问题
+        python-version: '312'
 
     - name: Install dependencies
       run: |
@@ -36,7 +36,6 @@ jobs:
         name: myapp-exe
         path: dist/MyApp.exe
 
-    # 获取当前日期（移到前面以便在Release说明中使用）
     - name: Get current date
       id: date
       run: echo "date=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" >> $env:GITHUB_OUTPUT
@@ -55,7 +54,7 @@ jobs:
             });
             
             // 删除所有资产
-            for (const asset of release.dataassets) {
+            for (const asset of release.dataassets) {  // 修复了这里！
               await github.rest.repos.deleteReleaseAsset({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -95,7 +94,6 @@ jobs:
             }
           }
 
-    # 创建新的标签
     - name: Create new tag
       run: |
         git config --global user.name 'GitHub Actions Bot'
@@ -103,7 +101,6 @@ jobs:
         git tag -f latest
         git push -f origin latest
 
-    # 创建新的Release
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1
@@ -123,18 +120,16 @@ jobs:
         draft: false
         prerelease: false
 
-    # 上传Release资产（修复了upload_url的引用）
     - name: Upload Release Asset
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        upload_url: ${{ steps.create_release.outputsupload_url }}  # 修复了这里！
+        upload_url: ${{ steps.create_release.outputsupload_url }}
         asset_path: ./dist/MyApp.exe
         asset_name: MyApp.exe
         asset_content_type: application/vnd.microsoft.portable-executable
 
-    # 显示构建信息
     - name: Show build info
       run: |
         echo "Build completed successfully!"
