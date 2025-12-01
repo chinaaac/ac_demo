@@ -18,7 +18,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.14.0'  # 使用稳定版本
+        python-version: '3.14.0'  # 使用稳定版本避免兼容性问题
 
     - name: Install dependencies
       run: |
@@ -35,6 +35,65 @@ jobs:
       with:
         name: myapp-exe
         path: dist/MyApp.exe
+
+    # 获取当前日期（移到前面以便在Release说明中使用）
+    - name: Get current date
+      id: date
+      run: echo "date=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" >> $env:GITHUB_OUTPUT
+
+    # 删除旧的Release和标签
+    - name: Delete old release and tag
+      uses: actions/github-script@v7
+      with:
+        script: |
+          try {
+            // 删除旧的Release
+            const release = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: 'latest'
+            });
+            
+            // 删除所有资产
+            for (const asset of release.dataassets) {
+              await github.rest.repos.deleteReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                asset_id: asset.id
+              });
+            }
+            
+            // 删除Release
+            await github.rest.repos.deleteRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.data.id
+            });
+            
+            console.log('Old release deleted successfully');
+          } catch (error) {
+            if (error.status === 404) {
+              console.log('No existing release found');
+            } else {
+              throw error;
+            }
+          }
+          
+          // 删除旧的标签
+          try {
+            await github.rest.git.deleteRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'tags/latest'
+            });
+            console.log('Old tag deleted successfully');
+          } catch (error) {
+            if (error.status === 404) {
+              console.log('No existing tag found');
+            } else {
+              throw error;
+            }
+          }
 
     # 创建新的标签
     - name: Create new tag
@@ -64,18 +123,19 @@ jobs:
         draft: false
         prerelease: false
 
-    # 上传Release资产
+    # 上传Release资产（修复了upload_url的引用）
     - name: Upload Release Asset
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        upload_url: ${{ steps.create_release.outputsupload_url }}
+        upload_url: ${{ steps.create_release.outputsupload_url }}  # 修复了这里！
         asset_path: ./dist/MyApp.exe
         asset_name: MyApp.exe
         asset_content_type: application/vnd.microsoft.portable-executable
 
-    # 获取当前日期
-    - name: Get current date
-      id: date
-      run: echo "date=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
+    # 显示构建信息
+    - name: Show build info
+      run: |
+        echo "Build completed successfully!"
+        echo "Release URL: ${{ steps.create_release.outputs.html_url }}"
