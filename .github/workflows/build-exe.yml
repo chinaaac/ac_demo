@@ -36,101 +36,29 @@ jobs:
         name: myapp-exe
         path: dist/MyApp.exe
 
-    - name: Get current date
-      id: date
-      run: echo "date=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" >> $env:GITHUB_OUTPUT
-
-    # 删除旧的Release和标签
-    - name: Delete old release and tag
-      uses: actions/github-script@v7
-      with:
-        script: |
-          try {
-            // 删除旧的Release
-            const release = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag: 'latest'
-            });
-            
-            // 删除所有资产
-            for (const asset of release.dataassets) {  // 修复了这里！
-              await github.rest.repos.deleteReleaseAsset({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                asset_id: asset.id
-              });
-            }
-            
-            // 删除Release
-            await github.rest.repos.deleteRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: release.data.id
-            });
-            
-            console.log('Old release deleted successfully');
-          } catch (error) {
-            if (error.status === 404) {
-              console.log('No existing release found');
-            } else {
-              throw error;
-            }
-          }
-          
-          // 删除旧的标签
-          try {
-            await github.rest.git.deleteRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: 'tags/latest'
-            });
-            console.log('Old tag deleted successfully');
-          } catch (error) {
-            if (error.status === 404) {
-              console.log('No existing tag found');
-            } else {
-              throw error;
-            }
-          }
-
-    - name: Create new tag
+    # 使用更简单的方法：直接覆盖标签
+    - name: Update latest tag
       run: |
         git config --global user.name 'GitHub Actions Bot'
         git config --global user.email 'actions@github.com'
         git tag -f latest
         git push -f origin latest
 
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+    # 使用GitHub CLI创建Release（更可靠）
+    - name: Create or update Release
+      run: |
+        # 删除现有的Release（如果存在）
+        gh release delete latest -y || echo "No existing release to delete"
+        
+        # 创建新的Release
+        gh release create latest ./dist/MyApp.exe \
+          --title "Latest Build" \
+          --notes "Automated build from ${{ github.sha }}" \
+          --latest
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: latest
-        release_name: Latest Build
-        body: |
-          ## Latest Automated Build
-          
-          - Build date: ${{ steps.date.outputs.date }}
-          - Commit: ${{ github.sha }}
-          - Branch: ${{ github.ref_name }}
-          
-          This is an automated build For more information, see the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
-        draft: false
-        prerelease: false
-
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputsupload_url }}
-        asset_path: ./dist/MyApp.exe
-        asset_name: MyApp.exe
-        asset_content_type: application/vnd.microsoft.portable-executable
 
     - name: Show build info
       run: |
         echo "Build completed successfully!"
-        echo "Release URL: ${{ steps.create_release.outputs.html_url }}"
+        echo "Check the Releases page for the latest build."
